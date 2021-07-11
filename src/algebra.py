@@ -1,7 +1,3 @@
-import hashlib
-from hashlib import sha256
-import hmac
-from random import randint
 
 
 class FieldElement(object):

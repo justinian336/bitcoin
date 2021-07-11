@@ -18,52 +18,11 @@ Transactions have four components:
   for each Input is `ffffffff`
 """
 
+import requests
+from script import Script
+
 from encryption import hash256
-
-
-def little_endian_to_int(b: bytes):
-    return int.from_bytes(b, 'little')
-
-
-def int_to_little_endian(n: int, length: int):
-    return n.to_bytes(length, 'little')
-
-
-def read_varint(s):
-    # Read the first byte as an int. This tells us whether to read 1, 2, 4 or 8 bytes.
-    i = s.read(1)[0]
-    # Read 2 bytes
-    if i == 0xfd:
-        return little_endian_to_int(s.read(2))
-    # Read 4 bytes
-    elif i == 0xfe:
-        return little_endian_to_int(s.read(4))
-    # Read 8 bytes
-    elif i == 0xff:
-        return little_endian_to_int(s.read(8))
-    # Just return the number (assumes it is 1 byte only? could be larger...)
-    else:
-        return i
-
-
-def encode_varint(i):
-    # Check if the number is under 256 (can be encoded in 1 byte)
-    if i < 2**8:
-        return bytes([i])
-    # Under 2 bytes
-    elif i < 2**(8*2):
-        return b'\xfd' + int_to_little_endian(i, 2)
-    # Under 4 bytes
-    elif i < 2**(8*4):
-        return b'\xfe' + int_to_little_endian(i, 4)
-    # Under 8 bytes
-    elif i < 2**(8*8):
-        return b'\xff' + int_to_little_endian(i, 8)
-    # NOPE
-    else:
-        raise ValueError(
-            f'Value too large to encode: {i}'
-        )
+from encoding_tools import *
 
 
 class Transaction(object):
@@ -133,6 +92,18 @@ class TransactionInput(object):
             self.script_sig = script_sig
         self.sequence = sequence
 
+    def fetch_transaction(self, testnet=False):
+        return TransactionFetcher.fetch(self.prev_index, testnet)
+
+    # TODO: These two methods below depend on what the TransactionFetcher.fetch method returns
+    def value(self, testnet=False):
+        transaction = self.fetch_transaction(testnet)
+        return transaction.outputs[self.prev_index].amount
+
+    def script_pubkey(self, testnet=False):
+        transaction = self.fetch_transaction(testnet)
+        return transaction.outputs[self.prev_index].script_pubkey
+
     @classmethod
     def parse(cls, s):
         # Previous transaction is 32 bytes little-endian (that's why we revert the bytes)
@@ -176,3 +147,14 @@ class TransactionOutput(object):
         amount: int = little_endian_to_int(s.read(8))
         script_pubkey = Script.parse(s)
         return cls(amount, script_pubkey)
+
+
+class TransactionFetcher(object):
+    """
+    This class should implement methods for fetching the information
+    of a given transaction id.
+    """
+
+    @classmethod
+    def fetch(cls, transaction_id, testnet):
+        raise NotImplementedError()
