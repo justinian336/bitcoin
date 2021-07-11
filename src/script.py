@@ -3,7 +3,8 @@ Implement Script, Bitcoin's smart contract language, as well as utility
 functions for parsing and serializing them.
 Implement also some standard scripts.
 """
-from encoding_tools import *
+from src.encoding_tools import *
+from src.ops import OP_CODE_FUNCTIONS
 
 
 # The abstract definition of scripts
@@ -89,6 +90,53 @@ class Script(object):
         result = self.raw_serialize()
         total = len(result)
         return encode_varint(total) + result
+
+    def evaluate(self, z):
+        commands = self.commands[:]
+        stack = []
+        altstack = []
+        while len(commands) > 0:
+            cmd = commands.pop(0)
+            if type(cmd) == int:
+                operation = OP_CODE_FUNCTIONS[cmd]
+                # This would be much more elegant with pattern matching, this is lame...
+                # These commands need the top element of the stack
+                if cmd in (99, 100):
+                    if not operation(stack, commands):
+                        print(f'Bad OP: {cmd}')
+                        return False
+
+                # OPs that require an alternative stack
+                elif cmd in (107, 108):
+                    if not operation(stack, altstack):
+                        print(f'Bad OP: {cmd}')
+                        return False
+
+                # Require the signature hash
+                elif cmd in (172, 173, 174, 175):
+                    if not operation(stack, z):
+                        print(f'Bad OP: {cmd}')
+                        return False
+
+                # OPs that only require the stack itself
+                else:
+                    if not operation(stack):
+                        print(f'Bad OP: {cmd}')
+                        return False
+
+            # It's an element, so just append it to the stack
+            else:
+                stack.append(cmd)
+
+        # Final check: the stack should not be empty, and the last element should not
+        # be an empty byte string.
+        if len(stack) == 0:
+            return False
+        if stack.pop(0) == b'':
+            return False
+
+        # All checks passed
+        return True
 
     # Naive implementation. In reality the scripts wouldn't be merged this way for security purposes (?)
     def __add__(self, other):

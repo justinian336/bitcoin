@@ -146,6 +146,7 @@ class Signature(object):
         # Encode r into binary
         rbin = self.r.to_bytes(32, 'big')
         rbin = rbin.lstrip(b'\x00')
+
         if rbin[0] & 0x80:
             rbin = b'\x00' + rbin
 
@@ -163,6 +164,54 @@ class Signature(object):
 
         # Marker for signature (30) + length(signature) + signature
         return bytes([0x30, len(result)]) + result
+
+    @classmethod
+    def parse(cls, sig):
+        # The first byte is the DER signature marker.
+        marker = sig[0]
+
+        # The marker should be 0x30 or it's not a valid DER signature
+        if marker != 0x30:
+            raise ValueError('Not a valid DER signature.')
+
+        # The next byte is the length of the signature
+        ln_sig = sig[1]
+        # The actual signature is what follows.
+        sig = sig[2:]
+        # The length of the rest of the signature should be equal to ln_sig:
+        if ln_sig != len(sig):
+            # TODO: should refactor these errors.
+            raise ValueError('Not a valid DER signature.')
+
+        # From here, parse the value of `r`:
+
+        # First check the `r` value marker:
+        mkr_r = sig[0]
+        if mkr_r != 0x02:
+            raise ValueError('Not a valid DER signature.')
+        # This is the length of `r`
+        ln_r = sig[1]
+        # Get `r`
+        r = sig[2: ln_r + 2]
+
+        # Now parse the value of `s`:
+        sig = sig[ln_r + 2:]
+        mkr_s = sig[0]
+        if mkr_s != 0x02:
+            raise ValueError('Not a valid DER signature.')
+        # This is the length of `s`
+        ln_s = sig[1]
+        # Check that the number of remaining bytes is `ln_s`
+        if len(sig[2:]) != ln_s:
+            raise ValueError('Not a valid DER signature.')
+        # Get `s`
+        s = sig[2:]
+
+        # Done parsing the signature, return a Signature object:
+        return cls(
+            int.from_bytes(r, 'big'),
+            int.from_bytes(s, 'big')
+        )
 
 
 class PrivateKey(object):
